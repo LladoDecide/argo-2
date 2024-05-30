@@ -1,0 +1,169 @@
+{{- if eq (include "isInternalDatabase" .) "true" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "odm.dbserver.fullname" . }}
+  labels:
+    run: {{ template "odm.dbserver.fullname" . }}
+{{ include "odm-additional-labels" (dict "componentName" "dbserver" "root" .) | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      run: {{ template "odm.dbserver.fullname" . }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        run: {{ template "odm.dbserver.fullname" . }}
+{{ include "odm-additional-labels" (dict "componentName" "dbserver" "root" .) | indent 8 }}
+{{ include "odm-annotations" . | indent 6 }}
+        productChargedContainers: ""
+    spec:
+{{ include "odm-serviceAccountName" . | indent 6 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.internalDatabase.runAsUser }}
+        fsGroup: {{ .Values.internalDatabase.runAsUser }}
+{{ include "odm-seccomp-profile" . | indent 8 }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          #If you specify multiple nodeSelectorTerms associated with nodeAffinity types,
+          #then the pod can be scheduled onto a node if one of the nodeSelectorTerms is satisfied.
+          #
+          #If you specify multiple matchExpressions associated with nodeSelectorTerms,
+          #then the pod can be scheduled onto a node only if all matchExpressions can be satisfied.
+          #
+          #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                {{- if .Values.image.arch }}
+                - {{ .Values.image.arch }}
+                {{- else }}
+                - {{ template "arch" . }}
+                {{- end }}
+      volumes:
+      - name: postgres-secret
+        secret:
+          {{- if not (empty .Values.internalDatabase.secretCredentials) }}
+          secretName: {{ .Values.internalDatabase.secretCredentials }}
+          {{- else }}
+          secretName: {{ template "odm.secret.fullname" . }}
+          {{- end }}
+      {{- if .Values.internalDatabase.persistence.enabled }}
+      - name: {{ template "fullname" . }}-volume
+        persistentVolumeClaim:
+          claimName: {{ template "odm.persistenceclaim.fullname" . }}
+      {{- else }}
+        {{- if .Values.customization.readOnlyRootFilesystem }}
+      - name: {{ template "fullname" . }}-volume
+        emptyDir: {}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.customization.readOnlyRootFilesystem }}
+      - name: tmp-folder-volume
+        emptyDir: {}
+      - name: pgsql-run-folder-volume
+        emptyDir: {}
+      {{- end }}
+
+      containers:
+      - name: {{ template "odm.dbserver.fullname" . }}
+{{ include "image.tagOrDigest" (dict "containerName" "dbserver" "containerTag" .Values.internalDatabase.tagOrDigest "root" .) | indent 8  }}
+##        image: {{ template "odm.repository.name" . }}/dbserver:{{ .Values.image.tag }}{{ template "platform" . }}
+        securityContext:
+          runAsUser: {{ .Values.internalDatabase.runAsUser }}
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem:  {{ .Values.customization.readOnlyRootFilesystem }}
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: POSTGRESQL_DATABASE
+          value: "{{ .Values.internalDatabase.databaseName }}"
+        - name: POSTGRES_DB
+          value: "{{ .Values.internalDatabase.databaseName }}"
+        - name: POSTGRESQL_USER_FILE
+          value: /var/run/postgresql/secrets/db-user
+        - name: POSTGRESQL_PASSWORD_FILE
+          value: /var/run/postgresql/secrets/db-password
+        - name: "KubeVersion"
+          value: "{{ .Capabilities.KubeVersion.GitVersion }}"
+        {{- if eq .Values.decisionCenter.persistenceLocale "en_US" }}
+        - name: SAMPLE
+          value: "{{ .Values.internalDatabase.populateSampleData }}"
+        {{- if .Values.internalDatabase.populateSampleData }}
+        {{- if not (empty .Values.decisionCenter.contextRoot) }}
+        - name: ODM_CONTEXT_ROOT
+          value: "{{ .Values.decisionCenter.contextRoot }}"
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        ports:
+        - name: db-port
+          containerPort: 5432
+        readinessProbe:
+          tcpSocket:
+            port: db-port
+          {{- if lt (int .Values.readinessProbe.initialDelaySeconds) 60 }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          {{- end }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+        livenessProbe:
+          tcpSocket:
+            port: db-port
+          {{- if lt (int .Values.livenessProbe.initialDelaySeconds) 60 }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          {{- end }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+        startupProbe:
+          tcpSocket:
+            port: db-port
+          periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+          failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+          initialDelaySeconds: {{ .Values.startupProbe.initialDelaySeconds }}
+        volumeMounts:
+          - name: postgres-secret
+            mountPath: "/var/run/postgresql/secrets/"
+            readOnly: true
+        {{- if .Values.internalDatabase.persistence.enabled }}
+          - name: {{ template "fullname" . }}-volume
+            mountPath: /var/lib/pgsql/
+            subPath : data
+        {{- else }}
+          {{- if .Values.customization.readOnlyRootFilesystem }}
+          - name: {{ template "fullname" . }}-volume
+            mountPath: /var/lib/pgsql/
+            subPath : data
+          {{- end }}
+        {{- end }}
+        {{- if .Values.customization.readOnlyRootFilesystem }}
+          - name: tmp-folder-volume
+            mountPath: /tmp
+          - name: pgsql-run-folder-volume
+            mountPath: /var/run/postgresql
+        {{- end }}
+        resources:
+{{ toYaml .Values.internalDatabase.resources | indent 10 }}
+{{ include "odm-pullsecret-spec" . | indent 6 }}
+{{- end }}

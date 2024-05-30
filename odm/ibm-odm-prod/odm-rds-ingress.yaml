@@ -1,0 +1,24 @@
+license: true
+usersPassword: "odmAdmin"
+
+image:
+  repository: cp.icr.io/cp/cp4a/odm
+  pullSecrets:
+  - my-odm-docker-registry
+
+service:
+  ingress:
+    enabled: true
+    class: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/backend-protocol: https
+    host:  
+    tlsHosts: ["a4fc28ba6dcea49d690ddcfe2797fbef-308527640.eu-west-1.elb.amazonaws.com"]
+    tlsSecretRef: odm-cert
+
+externalDatabase:
+  type: postgres
+  secretCredentials: odm-db-secret
+  port: 5432
+  serverName: terraform-20240513064208454400000007.c5q3uuu6ourj.eu-west-1.rds.amazonaws.com
+  databaseName: odmdb

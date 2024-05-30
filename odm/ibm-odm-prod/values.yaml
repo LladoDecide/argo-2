@@ -3,7 +3,7 @@
 # Declare variables to be passed into your templates.
 
 # Accept the terms of the IBM license by setting the license parameter to "true"
-license: false
+license: true
 
 # Users password is required if authSecretRef is not set.
 # Set the password for odm default users.

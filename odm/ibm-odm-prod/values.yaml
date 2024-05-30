@@ -76,8 +76,8 @@ decisionServerRuntime:
       ephemeral-storage: 1G
   autoscaling:
     enabled: false
-    minReplicas: 2
-    maxReplicas: 3
+    minReplicas: 1
+    maxReplicas: 1
     targetAverageUtilization: 75
   nodeAffinity:
   tolerations:
@@ -166,8 +166,8 @@ decisionCenter:
       ephemeral-storage: 2G
   autoscaling:
     enabled: false
-    minReplicas: 2
-    maxReplicas: 3
+    minReplicas: 1
+    maxReplicas: 1
     targetAverageUtilization: 75
   nodeAffinity:
   tolerations:
@@ -210,8 +210,8 @@ decisionRunner:
       ephemeral-storage: 1G
   autoscaling:
     enabled: false
-    minReplicas: 2
-    maxReplicas: 3
+    minReplicas: 1
+    maxReplicas: 1
     targetAverageUtilization: 75
   resURL:
   nodeAffinity:

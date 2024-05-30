@@ -7,7 +7,7 @@ license: true
 
 # Users password is required if authSecretRef is not set.
 # Set the password for odm default users.
-usersPassword: ""
+usersPassword: "Decide"
 
 image:
   repository: ""
